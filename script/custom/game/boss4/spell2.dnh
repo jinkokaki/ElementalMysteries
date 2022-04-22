@@ -1,0 +1,168 @@
+#TouhouDanmakufu[Single]
+#ScriptVersion[3]
+#Title["Roadwork Sign \"Increased Fines Ahead\""]
+#Text["Boss 4 - Spell Card 2"]
+#include"script/default_system/Default_ShotConst.txt"
+#include"script/default_system/Default_Effect.txt"
+#include"script/custom/game/cutin.dnh"
+let objBoss;
+let objScene = GetEnemyBossSceneObjectID();
+let angleT;
+let rngCurrent = -1;
+let rngPast = -1;
+@Event{
+	alternative(GetEventType())
+	case(EV_REQUEST_LIFE)
+	{
+		SetScriptResult(9999999);
+	}
+	case(EV_REQUEST_TIMER)
+	{
+		SetScriptResult(60);
+	}
+	case(EV_REQUEST_SPELL_SCORE)
+	{
+		SetScriptResult(30000);
+	}
+	case(EV_REQUEST_IS_DURABLE_SPELL) {
+		SetScriptResult(true);
+	}
+}
+@Initialize{
+	objBoss = ObjEnemy_Create(OBJ_ENEMY_BOSS);
+	ObjEnemy_Regist(objBoss);
+	ObjMove_SetDestAtFrame(objBoss, GetCenterX(), GetCenterY(), 60);
+
+	let boss4 = "script/custom/game/images/boss4.png";
+	ObjCutin_SetSpellcardS4("Roadwork Sign \"Increased Fines Ahead\"", BYAKUREN, boss4, 104, 240, 104);
+	ObjCutin_LaunchS3(BYAKUREN, boss4, "Normal");
+	ObjEnemyBossScene_StartSpell(objScene);
+
+	TDrawLoop;
+	TFinalize;
+	wait(60);
+	move;
+	fire1;
+}
+@MainLoop{
+	ObjEnemy_SetIntersectionCircleToShot(objBoss, bossX(), bossY(), 32);
+	ObjEnemy_SetIntersectionCircleToPlayer(objBoss, bossX(), bossY(), 24);
+	yield;
+}
+function GetCenterX(){
+	return GetStgFrameWidth() / 2;
+}
+function GetCenterY(){
+	return GetStgFrameHeight() / 2;
+}
+function wait(n) {
+	loop(n) {
+		yield;
+	}
+}
+function bossAlive() {
+	if (ObjEnemy_GetInfo(objBoss, INFO_LIFE) > 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
+function bossX() {
+	return ObjMove_GetX(objBoss);
+}
+function bossY() {
+	return ObjMove_GetY(objBoss);
+}
+function checkBomb() {
+	return ObjEnemyBossScene_GetInfo(objScene, INFO_PLAYER_SPELL_COUNT);
+}
+function checkDeath() {
+	return ObjEnemyBossScene_GetInfo(objScene, INFO_PLAYER_SHOOTDOWN_COUNT)
+}
+function randInt(min, max) {
+	return truncate(rand(min, max + 1));
+}
+task move {
+	while(bossAlive()) {
+		while (rngCurrent == rngPast) {
+			rngPast = rngCurrent;
+			rngCurrent = randInt(0, 4);
+			yield;
+		}
+		alternative(rngCurrent)
+		case (0) {
+			ObjMove_SetDestAtSpeed(objBoss, 35, 40, 2);
+			while(ObjMove_GetSpeed(objBoss) != 0) {
+				yield;
+			}
+		}
+		case (1) {
+			ObjMove_SetDestAtSpeed(objBoss, 360, 430, 2);
+			while(ObjMove_GetSpeed(objBoss) != 0) {
+				yield;
+			}
+		}
+		case (2) {
+			ObjMove_SetDestAtSpeed(objBoss, 35, 430, 2);
+			while(ObjMove_GetSpeed(objBoss) != 0) {
+				yield;
+			}
+		}
+		case (3) {
+			ObjMove_SetDestAtSpeed(objBoss, 360, 40, 2);
+			while(ObjMove_GetSpeed(objBoss) != 0) {
+				yield;
+			}
+		}
+		case (4) {
+			ObjMove_SetDestAtSpeed(objBoss, GetCenterX(), GetCenterY(), 2);
+			while(ObjMove_GetSpeed(objBoss) != 0) {
+				yield;
+			}
+		}
+		wait(180);
+		angleT = GetAngleToPlayer(objBoss);
+		rngCurrent = rngPast;
+	}
+}
+task fire1 {
+	while(bossAlive()) {
+		let distanceX = ObjMove_GetX(objBoss) - GetCenterX();
+		let distanceY = ObjMove_GetY(objBoss) - GetCenterY();
+		angleT = tan(distanceY / distanceX) * 180 / pi(); 
+		let curve = angleT;
+		ascent(i in 0..180) {
+			let deviation = randInt(-1, 1);
+			curve += deviation * 4;
+			CreateShotOA1(objBoss, 50, curve + deviation + 15, DS_BEAM_WHITE, 0);
+			CreateShotOA1(objBoss, 50, curve + deviation - 15, DS_BEAM_WHITE, 0);
+			if (curve - angleT > 30) {
+				curve = 30 + angleT;
+			}
+			if (curve - angleT < -30) {
+				curve = -30 + angleT;
+			}
+			yield;
+		}
+		wait(60);
+	}
+}
+task TDrawLoop {
+	let imgExRumia = "script/ExRumia/ExRumia.png";
+	ObjPrim_SetTexture(objBoss, imgExRumia);
+	ObjSprite2D_SetSourceRect(objBoss, 64, 1, 127, 64);
+	ObjSprite2D_SetDestCenter(objBoss);
+}
+task TFinalize {
+	while(bossAlive()) {
+		yield;
+	}
+	if (checkBomb() + checkDeath() == 0) {
+		AddScore(ObjEnemyBossScene_GetInfo(objScene, INFO_SPELL_SCORE));
+	}
+	Obj_Delete(objBoss);
+	DeleteShotAll(TYPE_ALL, TYPE_IMMEDIATE);
+	SetAutoDeleteObject(true);
+	CloseScript(GetOwnScriptID());
+	return;
+}

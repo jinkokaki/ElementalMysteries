@@ -1,0 +1,149 @@
+#TouhouDanmakufu[Single]
+#ScriptVersion[3]
+#Title["Construction Sign \"The Quick Nail Hammer\""]
+#Text["Boss 4 - Spell Card 1"]
+#include"script/default_system/Default_ShotConst.txt"
+#include"script/default_system/Default_Effect.txt"
+#include"script/custom/game/cutin.dnh"
+let objBoss;
+let objScene = GetEnemyBossSceneObjectID();
+let angleT;
+let shotIdArray = [0];
+ascent(i in 0..16) {
+	shotIdArray = shotIdArray ~ [0];
+}
+@Event{
+	alternative(GetEventType())
+	case(EV_REQUEST_LIFE)
+	{
+		SetScriptResult(2000);
+	}
+	case(EV_REQUEST_TIMER)
+	{
+		SetScriptResult(60);
+	}
+	case(EV_REQUEST_SPELL_SCORE)
+	{
+		SetScriptResult(30000);
+	}
+}
+@Initialize{
+	objBoss = ObjEnemy_Create(OBJ_ENEMY_BOSS);
+	ObjEnemy_Regist(objBoss);
+	ObjMove_SetX(objBoss, GetCenterX());
+	ObjMove_SetY(objBoss, 60);
+
+	let boss4 = "script/custom/game/images/boss4.png";
+	ObjCutin_SetSpellcardS4("Construction Sign \"The Quick Nail Hammer\"", NAZRIN, boss4, 240, 104, 104);
+	ObjCutin_LaunchS3(NAZRIN, boss4, "Normal");
+	ObjEnemyBossScene_StartSpell(objScene);
+
+	TDrawLoop;
+	TFinalize;
+	wait(60);
+	cast;
+	fire;
+}
+@MainLoop{
+	ObjEnemy_SetIntersectionCircleToShot(objBoss, bossX(), bossY(), 32);
+	ObjEnemy_SetIntersectionCircleToPlayer(objBoss, bossX(), bossY(), 24);
+	yield;
+}
+function GetCenterX(){
+	return GetStgFrameWidth() / 2;
+}
+function GetCenterY(){
+	return GetStgFrameHeight() / 2;
+}
+function wait(n) {
+	loop(n) {
+		yield;
+	}
+}
+function bossAlive() {
+	if (ObjEnemy_GetInfo(objBoss, INFO_LIFE) > 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
+function bossX() {
+	return ObjMove_GetX(objBoss);
+}
+function bossY() {
+	return ObjMove_GetY(objBoss);
+}
+function checkBomb() {
+	return ObjEnemyBossScene_GetInfo(objScene, INFO_PLAYER_SPELL_COUNT);
+}
+function checkDeath() {
+	return ObjEnemyBossScene_GetInfo(objScene, INFO_PLAYER_SHOOTDOWN_COUNT)
+}
+function inBounds(thing) {
+	if (ObjMove_GetX(thing) > 0 && ObjMove_GetX(thing) < 380 && ObjMove_GetY(thing) > 30 && ObjMove_GetY(thing) < 450) {
+		return true;
+	} else {
+		return false;
+	}
+}
+function randInt(min, max) {
+	return truncate(rand(min, max + 1));
+}
+task cast {
+	while (bossAlive()) {
+		ascent (i in 0..16) {
+			let posX = randInt(0, 380);
+			let posY = randInt(30, 450);
+			let shotId = CreateShotOA1(objBoss, 0, 0, DS_TABLET, 15);
+			shotIdArray[i] = shotId;
+			ObjMove_SetDestAtFrame(shotId, posX, posY, 60);
+			track(shotId);
+		}
+		wait(300);
+	}
+}
+task track(laserSource) {
+	while (ObjMove_GetSpeed(laserSource) != 0) {
+		yield;
+	}
+	let laser = CreateStraightLaserA1(ObjMove_GetX(laserSource), ObjMove_GetY(laserSource), GetAngleToPlayer(laserSource), 512, 20, 60, DS_BEAM_RAINBOW, 75);
+	ascent(i in 0..60) {
+		ObjStLaser_SetAngle(laser, GetAngleToPlayer(laserSource));
+		yield;
+	}
+	wait(60);
+	ascent(i in 0..16) {
+		Obj_Delete(shotIdArray[i]);
+	}
+}
+task fire {
+	while (bossAlive()) {
+		ascent (i in 0..8) {
+			let angle = GetAngleToPlayer(objBoss) + 90 - 360 * i / 8;
+			let curvedLaser = CreateCurveLaserA1(ObjMove_GetX(objBoss), ObjMove_GetY(objBoss), 2.5, GetAngleToPlayer(objBoss), 20, 8, DS_BEAM_WHITE, 10);
+			ObjCrLaser_SetTipDecrement(curvedLaser, 0);
+			ObjMove_AddPatternA2(curvedLaser, 0, 4, angle, 0, 4, 5);
+			ObjMove_AddPatternA2(curvedLaser, 120, NO_CHANGE, NO_CHANGE, -0.2, 0.5, 2.5);
+    	}
+    	wait(60);
+	}
+}
+task TDrawLoop {
+	let imgExRumia = "script/ExRumia/ExRumia.png";
+	ObjPrim_SetTexture(objBoss, imgExRumia);
+	ObjSprite2D_SetSourceRect(objBoss, 64, 1, 127, 64);
+	ObjSprite2D_SetDestCenter(objBoss);
+}
+task TFinalize {
+	while(bossAlive()) {
+		yield;
+	}
+	if (checkBomb() + checkDeath() == 0) {
+		AddScore(ObjEnemyBossScene_GetInfo(objScene, INFO_SPELL_SCORE));
+	}
+	Obj_Delete(objBoss);
+	DeleteShotAll(TYPE_ALL, TYPE_IMMEDIATE);
+	SetAutoDeleteObject(true);
+	CloseScript(GetOwnScriptID());
+	return;
+}
